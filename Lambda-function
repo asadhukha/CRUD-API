@@ -1,0 +1,65 @@
+import boto3
+from botocore.exceptions import ClientError
+import json
+
+# Initialize the DynamoDB client
+dynamodb = boto3.client('dynamodb')
+
+# The DynamoDB table name
+table_name = "http-crud-tutorial-items"
+
+def lambda_handler(event, context):
+    body = None
+    status_code = 200
+    headers = {
+        "Content-Type": "application/json",
+    }
+
+    try:
+        if event['routeKey'] == "DELETE /items/{id}":
+            response = dynamodb.delete_item(
+                TableName=table_name,
+                Key={
+                    'id': {'S': event['pathParameters']['id']}
+                }
+            )
+            body = f"Deleted item {event['pathParameters']['id']}"
+        
+        elif event['routeKey'] == "GET /items/{id}":
+            response = dynamodb.get_item(
+                TableName=table_name,
+                Key={
+                    'id': {'S': event['pathParameters']['id']}
+                }
+            )
+            body = response.get('Item', None)
+        
+        elif event['routeKey'] == "GET /items":
+            response = dynamodb.scan(TableName=table_name)
+            body = response.get('Items', [])
+        
+        elif event['routeKey'] == "PUT /items":
+            request_json = json.loads(event['body'])
+            response = dynamodb.put_item(
+                TableName=table_name,
+                Item={
+                    'id': {'S': request_json['id']},
+                    'price': {'N': str(request_json['price'])},
+                    'name': {'S': request_json['name']}
+                }
+            )
+            body = f"Put item {request_json['id']}"
+        
+        else:
+            raise Exception(f"Unsupported route: {event['routeKey']}")
+
+    except ClientError as err:
+        status_code = 400
+        body = err.response['Error']['Message']
+    
+    finally:
+        return {
+            'statusCode': status_code,
+            'body': json.dumps(body),
+            'headers': headers
+        }
